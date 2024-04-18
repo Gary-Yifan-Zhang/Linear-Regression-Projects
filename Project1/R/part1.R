@@ -188,6 +188,25 @@ for (i in 1:nrow(test_data)) {
   cat("Exponential confidence interval for", test_data[i, "Coastal"], test_data[i, "Part"], ":", exp(prediction), "\n \n")
 }
 
+# 2(c). # 
+kommuner <- mutate(kommuner, Coastal = relevel(Coastal,"Yes"))
+model_lev <- lm(log(PM10) ~ log(Vehicles) + Coastal*Part, data=kommuner)
+confint(model_lev)
+summary(model_lev)
+
+## göra anova med den nya reducerade modellen, stort F värden 
+# så är den större modellen sämre/onödig
+
+kommuner <-
+  mutate(kommuner, NewParts =
+           as.numeric(Part == "Gotaland" & Coastal == "No") +
+           2*as.numeric(Part == "Svealand" & Coastal == "No") +
+           3*as.numeric(Part == "Norrland" | Coastal == "Yes"))
+kommuner$NewParts <- factor(kommuner$NewParts, labels = c("GotalandNo", "SvealandNo", "NorrlandYes"))
+test_model <- lm(log(PM10)~ log(Vehicles) + NewParts, data=kommuner)
+summary(test_model)
+anova(test_model,model_lev)
+confint(test_model)
 
 
 ggplot(kommuner, aes(x = Vehicles, y = log(PM10))) + geom_point()
@@ -237,7 +256,7 @@ kommuner_pred <- mutate(kommuner,
 pplus1 <- length(model_2e$coefficients)
 n <- nobs(model_2e)
 
-# Get top 6 city
+# Get top leverage
 top_leverage <- kommuner_pred %>%
   arrange(desc(v)) %>%
   slice(1:6)
@@ -378,7 +397,7 @@ ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = r)) +
 
 high_residuals <- filter(kommuner_pred_DFBETAS, abs(r) > 3)
 
-# 绘制sqrt(|r*|)对拟合值的图，并为|r*| > 3的点添加名称
+# Plot sqrt(|r*|) against fitted values and label the points where |r*| > 3.
 ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = sqrt(abs(r)))) +
   geom_point(size = 2) +
   geom_point(data = high_residuals, aes(color = "|r*|>3"), size = 4) +
@@ -396,3 +415,112 @@ ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = sqrt(abs(r)))) +
 
 ################################################################################
 # 3(d). Explain, exclude, refit. 
+#newdata <- kommuner %>%
+#  filter(Kommun != "0481 Oxelösund")
+remove_municipalities <- c("0481 Oxelösund", "1082 Karlshamn", "0861 Mönsterås",
+                           "2523 Gällivare", "1480 Göteborg")
+newdata <- kommuner %>%
+  filter(!Kommun %in% remove_municipalities)
+kommuner_excl_lm <- update(model_2e, data = newdata)
+kommuner_pred <- mutate(newdata,
+                        yhat = predict(kommuner_excl_lm),
+                        r = rstudent(kommuner_excl_lm),
+                        v = hatvalues(kommuner_excl_lm),
+                        D = cooks.distance(kommuner_excl_lm))
+kommuner_pred_excl <- mutate(
+  kommuner_pred,
+  df0 = dfbetas(kommuner_excl_lm)[, "(Intercept)"],
+  df1 = dfbetas(kommuner_excl_lm)[, "log(Vehicles)"],
+  df2 = dfbetas(kommuner_excl_lm)[, "log(Higheds)"],
+  df3 = dfbetas(kommuner_excl_lm)[, "Children"],
+  df4 = dfbetas(kommuner_excl_lm)[, "log(Income)"],
+  df5 = dfbetas(kommuner_excl_lm)[, "log(GRP)"],
+  fit = predict(kommuner_excl_lm),
+  r = rstudent(kommuner_excl_lm),
+  D = cooks.distance(kommuner_excl_lm))
+
+# Get municipality with high residuals
+high_residuals <- filter(kommuner_pred_excl, abs(r) > 3)
+
+# Plot sqrt(|r*|) against fitted values and label the points where |r*| > 3.
+ggplot(kommuner_pred_excl, aes(x = fit, y = sqrt(abs(r)))) +
+  geom_point(size = 2) +
+  geom_point(data = high_residuals, aes(color = "|r*|>3"), size = 4) +
+  geom_text(data = high_residuals, aes(label = Kommun), vjust = 2, color = "blue", size = 3) +  
+  geom_hline(yintercept = c(sqrt(qnorm(0.75)), sqrt(2))) +
+  geom_hline(yintercept = sqrt(3), linetype = "dashed") +
+  labs(title = "sqrt(|r*|) vs fitted values",
+       subtitle = "Analysis of variance stabilization",
+       caption = "Reference lines at y = sqrt(0.75 quantile of normal), sqrt(2), sqrt(3)") +
+  theme_minimal() +
+  theme(text = element_text(size = 14),
+        legend.position = "bottom") +
+  scale_color_manual(values = c("|r*|>3" = "red"))
+
+# summary & confint of both models
+summary(kommuner_excl_lm)
+confint(kommuner_excl_lm)
+
+summary(model_2e)
+confint(model_2e)
+
+################################################################################
+# 3(e). Variable selection.
+
+# prepare models for stepwise selection
+model_null <- lm(log(PM10) ~ 1, data = newdata)
+model_null_sum <- summary(model_null)
+
+model_1b <- lm(log(PM10) ~ log(Vehicles), data = newdata)
+model_1b_sum <- summary(model_1b)
+
+model_2c <- lm(log(PM10)~ log(Vehicles) + NewParts, data=newdata)
+model_2c_sum <- summary(model_2c)
+
+model_3d <- update(model_2e, data = newdata)
+model_3d_sum <- summary(model_3d)
+
+# AIC stepwise selection
+step_model_aic <- step(model_1b,
+                       scope = list(lower = model_null, upper = model_3d),
+                       direction = "both",
+                       trace = TRUE,  # trace=TRUE detail information for every steps
+                       k = 2)  # k=2 means using AIC
+
+summary(step_model_aic)
+
+
+# BIC stepwise selection
+step_model_bic <- step(model_1b,
+                       scope = list(lower = model_null, upper = model_3d),
+                       direction = "both",
+                       trace = TRUE,
+                       k =  log(nobs(model_3d)))  # BIC
+
+# Gathering statistics for each model
+model_stats <- function(model) {
+  data.frame(
+    Beta_Parameters = length(coef(model)),  # Number of beta parameters
+    Residual_SD = sigma(model),  # Residual Standard Deviation
+    R_Squared = summary(model)$r.squared,  # R-squared
+    Adjusted_R_Squared = summary(model)$adj.r.squared,  # Adjusted R-squared
+    AIC = AIC(model),  # AIC
+    BIC = BIC(model)  # BIC
+  )
+}
+
+# Apply function to each model and combine results
+model_comparison <- data.frame(
+  Model = c("Null", "Model 1(b)", "Model 2(c)", "Model 3(d)", "AIC Model", "BIC Model"),
+  rbind(
+    model_stats(model_null),
+    model_stats(model_1b),
+    model_stats(model_2c),
+    model_stats(model_3d),
+    model_stats(step_model_aic),
+    model_stats(step_model_bic)
+  )
+)
+
+# Print the comparison table
+print(model_comparison)

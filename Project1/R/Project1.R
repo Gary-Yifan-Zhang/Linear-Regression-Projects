@@ -198,27 +198,6 @@ summary(test_model)
 anova(test_model,model_lev)
 confint(test_model)
 
-# 2(c). # 
-kommuner <- mutate(kommuner, Coastal = relevel(Coastal,"Yes"))
-model_lev <- lm(log(PM10) ~ log(Vehicles) + Coastal*Part, data=kommuner)
-confint(model_lev)
-summary(model_lev)
-
-## göra anova med den nya reducerade modellen, stort F värden 
-# så är den större modellen sämre/onödig
-
-kommuner <-
-  mutate(kommuner, NewParts =
-           as.numeric(Part == "Gotaland" & Coastal == "No") +
-           2*as.numeric(Part == "Svealand" & Coastal == "No") +
-           3*as.numeric(Part == "Norrland" | Coastal == "Yes"))
-kommuner$NewParts <- factor(kommuner$NewParts, labels = c("GotalandNo", "SvealandNo", "NorrlandYes"))
-test_model <- lm(log(PM10)~ log(Vehicles) + NewParts, data=kommuner)
-summary(test_model)
-anova(test_model,model_lev)
-confint(test_model)
-
-
 
 ggplot(kommuner, aes(x =Higheds , y = log(PM10))) +
   geom_point() 
@@ -270,6 +249,6 @@ vif(model_2d)
 
 model_2ee <- lm(log(PM10)~log(Vehicles)+log(Higheds)+Children+Seniors+log(Income)+log(GRP)+NewParts, data=kommuner)
 vif(model_2ee)
-ggpairs(kommuner,columns=c(5,7,8,9,10,11,18)) #remove seniors
+ggpairs(kommuner,columns=c(5,7,8,9,10,11,15)) #remove seniors
 model_2e <- lm(log(PM10)~log(Vehicles)+log(Higheds)+Children+log(Income)+log(GRP)+NewParts, data=kommuner)
 vif(model_2e)
