@@ -274,6 +274,10 @@ ggplot(kommuner_pred, aes(x = log(Vehicles), y = v)) +
   theme(legend.position = "bottom",
         text = element_text(size = 16))
 
+ggpairs(kommuner,columns=c(5,7,9,10,11,15))+
+geom_point(data = top_leverage, aes(x = log(Vehicles), y = v), color = "red", size = 3) +  
+  geom_text(data = top_leverage, aes(x = log(Vehicles), y = v, label = Kommun), vjust = -1, color = "blue") +
+  facet_wrap(~NewParts)
 ################################################################################
 # 3(b). Cook’s distance. 
 f1.kommuner <- pplus1
@@ -301,6 +305,12 @@ ggplot(kommuner_pred, aes(x = yhat, y = D)) +
 head(dfbetas(model_2e))
 
 dfbetas_values <- dfbetas(model_2e)
+
+# 获取top_cooks中的行号
+top_cooks_indices <- which(rownames(kommuner_pred) %in% rownames(top_cooks))
+
+# 提取对应的DFBETAS值
+top_cooks_dfbetas <- dfbetas_values[top_cooks_indices, ]
 
 # Get the name of these municipalities
 influential_municipalities <- kommuner_pred$Kommun[max_dfbetas_indices]
@@ -343,11 +353,11 @@ highlightcolors <- c("|r*|>3" = "red",
 
 # Top influential municipalities in DFBETAS
 top_influential <- kommuner_pred_DFBETAS %>%
-  arrange(desc(abs(df0))) %>%
-  arrange(desc(abs(df0))) %>%
+  arrange(desc(abs(df2))) %>%
+  arrange(desc(abs(df2))) %>%
   slice(1:6)
 
-ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = df0)) +
+ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = df2)) +
   geom_point(size = 2) +
   geom_point(data = filter(kommuner_pred_DFBETAS, abs(r) > 3),
              aes(color = "|r*|>3"), size = 3) +
