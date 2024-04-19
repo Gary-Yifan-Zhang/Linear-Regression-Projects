@@ -306,6 +306,7 @@ head(dfbetas(model_2e))
 
 dfbetas_values <- dfbetas(model_2e)
 
+max_dfbetas_indices <- apply(dfbetas_values, 2, which.max)
 # 获取top_cooks中的行号
 top_cooks_indices <- which(rownames(kommuner_pred) %in% rownames(top_cooks))
 
@@ -316,7 +317,7 @@ top_cooks_dfbetas <- dfbetas_values[top_cooks_indices, ]
 influential_municipalities <- kommuner_pred$Kommun[max_dfbetas_indices]
 
 # Plot log(PM10) vs Vehicles, maybe we need to change the β-parameter
-ggplot(kommuner_pred, aes(x = Vehicles, y = log(PM10))) +
+ggplot(kommuner_pred, aes(x = Children, y = log(PM10))) +
   geom_point() +
   geom_point(data = kommuner_pred[kommuner_pred$Kommun %in% influential_municipalities, ],
              aes(x = Vehicles, y = log(PM10)), color = "red", size = 4) + 
@@ -428,7 +429,9 @@ ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = sqrt(abs(r)))) +
 #newdata <- kommuner %>%
 #  filter(Kommun != "0481 Oxelösund")
 remove_municipalities <- c("0481 Oxelösund", "1082 Karlshamn", "0861 Mönsterås",
-                           "2523 Gällivare", "1480 Göteborg")
+                           "2523 Gällivare", "1480 Göteborg", "2584 Kiruna",
+                           "1484 Lysekil", "1761 Hammarö", "2514 Kalix",
+                           "1882 Askersund", "Örnsköldsvik")
 newdata <- kommuner %>%
   filter(!Kommun %in% remove_municipalities)
 kommuner_excl_lm <- update(model_2e, data = newdata)
@@ -450,13 +453,13 @@ kommuner_pred_excl <- mutate(
   D = cooks.distance(kommuner_excl_lm))
 
 # Get municipality with high residuals
-high_residuals <- filter(kommuner_pred_excl, abs(r) > 3)
+high_residuals_excl <- filter(kommuner_pred_excl, abs(r) > 3)
 
 # Plot sqrt(|r*|) against fitted values and label the points where |r*| > 3.
 ggplot(kommuner_pred_excl, aes(x = fit, y = sqrt(abs(r)))) +
   geom_point(size = 2) +
-  geom_point(data = high_residuals, aes(color = "|r*|>3"), size = 4) +
-  geom_text(data = high_residuals, aes(label = Kommun), vjust = 2, color = "blue", size = 3) +  
+  geom_point(data = high_residuals_excl, aes(color = "|r*|>3"), size = 4) +
+  geom_text(data = high_residuals_excl, aes(label = Kommun), vjust = 2, color = "blue", size = 3) +  
   geom_hline(yintercept = c(sqrt(qnorm(0.75)), sqrt(2))) +
   geom_hline(yintercept = sqrt(3), linetype = "dashed") +
   labs(title = "sqrt(|r*|) vs fitted values",
