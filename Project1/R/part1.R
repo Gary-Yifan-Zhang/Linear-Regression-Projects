@@ -278,6 +278,8 @@ ggpairs(kommuner,columns=c(5,7,9,10,11,15))+
 geom_point(data = top_leverage, aes(x = log(Vehicles), y = v), color = "red", size = 3) +  
   geom_text(data = top_leverage, aes(x = log(Vehicles), y = v, label = Kommun), vjust = -1, color = "blue") +
   facet_wrap(~NewParts)
+
+
 ################################################################################
 # 3(b). Cook’s distance. 
 f1.kommuner <- pplus1
@@ -307,27 +309,29 @@ head(dfbetas(model_2e))
 dfbetas_values <- dfbetas(model_2e)
 
 max_dfbetas_indices <- apply(dfbetas_values, 2, which.max)
-# 获取top_cooks中的行号
-top_cooks_indices <- which(rownames(kommuner_pred) %in% rownames(top_cooks))
-
-# 提取对应的DFBETAS值
-top_cooks_dfbetas <- dfbetas_values[top_cooks_indices, ]
 
 # Get the name of these municipalities
 influential_municipalities <- kommuner_pred$Kommun[max_dfbetas_indices]
 
-# Plot log(PM10) vs Vehicles, maybe we need to change the β-parameter
-ggplot(kommuner_pred, aes(x = Children, y = log(PM10))) +
-  geom_point() +
-  geom_point(data = kommuner_pred[kommuner_pred$Kommun %in% influential_municipalities, ],
-             aes(x = Vehicles, y = log(PM10)), color = "red", size = 4) + 
-  geom_text(data = kommuner_pred[kommuner_pred$Kommun %in% influential_municipalities, ],
-            aes(x = Vehicles, y = log(PM10), label = Kommun), vjust = -1, color = "blue") +
-  xlab("Vehicles (1000/capita)") +
-  ylab("log(PM10) (g)") +
-  labs(title = "Influence of Municipalities on PM10",
-       subtitle = "Red points indicate municipalities with significant influence on beta parameters") +
-  theme(text = element_text(size = 16))
+# Plot log(PM10) vs variables, maybe we need to change the β-parameter
+# model_2e <- lm(log(PM10)~log(Vehicles)+log(Higheds)+Children+log(Income)+log(GRP)+NewParts, data=kommuner)
+independent_vars <- c("log(Vehicles)", "log(Higheds)", "Children", "log(Income)", "log(GRP)")
+
+
+for (var in independent_vars) {
+  ggplot(kommuner_pred, aes_string(x = var, y = "log(PM10)")) +
+    geom_point() +
+    geom_point(data = kommuner_pred[kommuner_pred$Kommun %in% influential_municipalities, ],
+               aes_string(x = var, y = "log(PM10)"), color = "red", size = 4) +
+    geom_text(data = kommuner_pred[kommuner_pred$Kommun %in% influential_municipalities, ],
+              aes_string(x = var, y = "log(PM10)", label = "Kommun"), vjust = -1, color = "blue") +
+    xlab(paste(var, "(1000/capita)")) +
+    ylab("log(PM10) (g)") +
+    labs(title = "Influence of Municipalities on PM10",
+         subtitle = paste("Red points indicate municipalities with significant influence on beta parameters for", var)) +
+    theme(text = element_text(size = 16))
+  print(ggplot2::last_plot())  # plot all the vars
+}
 
 
 kommuner_pred_DFBETAS <- mutate(
@@ -358,7 +362,9 @@ top_influential <- kommuner_pred_DFBETAS %>%
   arrange(desc(abs(df2))) %>%
   slice(1:6)
 
-ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = df2)) +
+# Change the y axis into df0 ~ df5, check if the resulting plot 
+# is the same as the previous plot of log(PM10) vs variables.
+ggplot(kommuner_pred_DFBETAS, aes(x t= fit, y = df4)) +
   geom_point(size = 2) +
   geom_point(data = filter(kommuner_pred_DFBETAS, abs(r) > 3),
              aes(color = "|r*|>3"), size = 3) +
@@ -431,7 +437,13 @@ ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = sqrt(abs(r)))) +
 remove_municipalities <- c("0481 Oxelösund", "1082 Karlshamn", "0861 Mönsterås",
                            "2523 Gällivare", "1480 Göteborg", "2584 Kiruna",
                            "1484 Lysekil", "1761 Hammarö", "2514 Kalix",
-                           "1882 Askersund", "Örnsköldsvik")
+                           "1882 Askersund", "2284 Örnsköldsvik", "1494 Lidköping",
+                           "1781 Kristinehamn", "2262 Timrå", "1460 Bengtsfors",
+                           "0980 Gotland", "0319 Älvkarleby", "1885 Lindesberg",
+                           "1272 Bromölla")
+
+#remove_municipalities <- c("0481 Oxelösund", "1082 Karlshamn", "0861 Mönsterås",
+#                           "2523 Gällivare", "1480 Göteborg", "2584 Kiruna")
 newdata <- kommuner %>%
   filter(!Kommun %in% remove_municipalities)
 kommuner_excl_lm <- update(model_2e, data = newdata)
@@ -509,6 +521,7 @@ step_model_bic <- step(model_1b,
                        direction = "both",
                        trace = TRUE,
                        k =  log(nobs(model_3d)))  # BIC
+summary(step_model_bic)
 
 # Gathering statistics for each model
 model_stats <- function(model) {
