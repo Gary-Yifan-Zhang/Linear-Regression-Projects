@@ -210,18 +210,66 @@ anova(test_model,model_lev)
 confint(test_model)
 
 
-ggplot(kommuner, aes(x = Vehicles, y = log(PM10))) + geom_point()
-       
+### 2(d)
+# get all the numerical vars
+numeric_vars <- sapply(kommuner, is.numeric) & names(kommuner) != "PM10"
+numeric_data <- kommuner[, numeric_vars]
+
+kommuner$log_PM10 <- log(kommuner$PM10) 
+
+# init a list for plots
+plots <- list()
+
+# get all the plots of all the numerical variables
+for (var in names(numeric_data)) {
+  # fit 
+  lin_model <- lm(log_PM10 ~ get(var), data = kommuner)
+  log_model <- lm(log_PM10 ~ log(get(var)), data = kommuner)
   
-ggplot(kommuner, aes(x = log(Vehicles), y = log(PM10))) + geom_point()     
+  # predict and residuals
+  kommuner$yhatlin <- predict(lin_model, newdata = kommuner)
+  kommuner$yhatlog <- predict(log_model, newdata = kommuner)
+  kommuner$elin <- resid(lin_model)
+  kommuner$elog <- resid(log_model)
+  
+  # plot all 
+  p1 <- ggplot(kommuner, aes_string(x = var, y = "log_PM10")) +
+    geom_point() +
+    ggtitle(paste("Relationship of", var, "with log(PM10)"))
+  
+  p2 <- ggplot(kommuner, aes_string(x = paste0("log(", var, "+1e-6)"), y = "log_PM10")) +
+    geom_point() +
+    ggtitle(paste("Log relationship of", var, "with log(PM10)"))
+  
+  p3 <- ggplot(kommuner, aes(x = yhatlin, y = elin)) +
+    geom_point() +
+    geom_hline(yintercept = 0) +
+    ggtitle("Residual Plot without Log")
+  
+  p4 <- ggplot(kommuner, aes(x = yhatlog, y = elog)) +
+    geom_point() +
+    geom_hline(yintercept = 0) +
+    ggtitle("Residual Plot with Log")
+  
+  p5 <- ggplot(data = kommuner, aes(sample = elin)) +
+    geom_qq() +
+    geom_qq_line() +
+    ggtitle("Normal Q-Q-plot of the residuals without Log")
+  
+  p6 <- ggplot(data = kommuner, aes(sample = elog)) +
+    geom_qq() +
+    geom_qq_line() +
+    ggtitle("Normal Q-Q-plot of the residuals with Log")
+  
+  # Combine plots into a grid
+  combined_plot <- gridExtra::grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 2)
+  plots[[var]] <- combined_plot
+}
 
-ggplot(kommuner, aes(x = log(Builton), y = log(PM10))) + geom_point() ##  
-
-ggplot(kommuner, aes(x = Children, y = log(PM10))) + geom_point() 
-
-ggplot(kommuner, aes(x = log(GRP), y = log(PM10))) + geom_point() 
-
-ggplot(kommuner, aes(x = log(Income), y = log(PM10))) + geom_point() 
+for (var in names(plots)) {
+  print(plots[[var]])  
+  # ggsave(paste0("plot_", var, ".png"), plot = plots[[var]])  # save the plots
+}
 
 # Higheds, Builton
 model_x <- lm(log(PM10)~ log(Vehicles)+log(Higheds)+log(Builton), data=kommuner)
@@ -235,6 +283,7 @@ summary(model_2d)
 confint(model_2d)
 vif(model_2d)
 
+### 2(e)
 model_2ee <- lm(log(PM10)~log(Vehicles)+log(Higheds)+Children+Seniors+log(Income)+log(GRP)+NewParts, data=kommuner)
 vif(model_2ee)
 ggpairs(kommuner,columns=c(5,7,8,9,10,11,15)) #remove seniors
@@ -275,6 +324,7 @@ ggplot(kommuner_pred, aes(x = log(Vehicles), y = v)) +
   theme(legend.position = "bottom",
         text = element_text(size = 16))
 
+# I might to it wrong 
 #ggpairs(kommuner,columns=c(5,7,9,10,11,15))+
 #geom_point(data = top_leverage, aes(x = log(Vehicles), y = v), color = "red", size = 3) +  
 #  geom_text(data = top_leverage, aes(x = log(Vehicles), y = v, label = Kommun), vjust = -1, color = "blue") +
@@ -284,7 +334,7 @@ ggplot(kommuner_pred, aes(x = log(Vehicles), y = v)) +
 columns_interest <- c(5, 7, 9, 10, 11, 15)
 column_names <- names(kommuner)[columns_interest]
 
-# plot all the conbination of x-variables
+# plot all the combinations of x-variables
 plot_list <- list()
 for (i in seq_along(column_names)) {
   for (j in seq_along(column_names)) {
