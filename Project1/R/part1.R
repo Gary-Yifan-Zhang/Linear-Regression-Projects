@@ -10,6 +10,7 @@ library(dplyr)
 library(readxl)
 library(car)
 library(GGally)
+library(gridExtra)
 
 # load data
 kommuner <- read_excel("Data/kommuner.xlsx")
@@ -274,10 +275,32 @@ ggplot(kommuner_pred, aes(x = log(Vehicles), y = v)) +
   theme(legend.position = "bottom",
         text = element_text(size = 16))
 
-ggpairs(kommuner,columns=c(5,7,9,10,11,15))+
-geom_point(data = top_leverage, aes(x = log(Vehicles), y = v), color = "red", size = 3) +  
-  geom_text(data = top_leverage, aes(x = log(Vehicles), y = v, label = Kommun), vjust = -1, color = "blue") +
-  facet_wrap(~NewParts)
+#ggpairs(kommuner,columns=c(5,7,9,10,11,15))+
+#geom_point(data = top_leverage, aes(x = log(Vehicles), y = v), color = "red", size = 3) +  
+#  geom_text(data = top_leverage, aes(x = log(Vehicles), y = v, label = Kommun), vjust = -1, color = "blue") +
+#  facet_wrap(~NewParts)
+
+# define columns with interested variables
+columns_interest <- c(5, 7, 9, 10, 11, 15)
+column_names <- names(kommuner)[columns_interest]
+
+# plot all the conbination of x-variables
+plot_list <- list()
+for (i in seq_along(column_names)) {
+  for (j in seq_along(column_names)) {
+    if (i < j) {
+      p <- ggplot(kommuner, aes_string(x = column_names[i], y = column_names[j])) +
+        geom_point() +
+        facet_wrap(~NewParts) +
+        geom_point(data = top_leverage, aes_string(x = column_names[i], y = column_names[j]), color = "red") +
+        geom_text(data = top_leverage, aes_string(x = column_names[i], y = column_names[j], label = "Kommun"), vjust = -1.5, color = "blue", size = 3)
+      plot_list[[length(plot_list) + 1]] <- p
+    }
+  }
+}
+
+# use gridExtra to arrange this plots
+do.call(gridExtra::grid.arrange, c(plot_list, ncol = length(column_names) - 1))
 
 
 ################################################################################
