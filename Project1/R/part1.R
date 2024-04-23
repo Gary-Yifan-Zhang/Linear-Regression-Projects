@@ -198,12 +198,20 @@ summary(model_lev)
 ## göra anova med den nya reducerade modellen, stort F värden 
 # så är den större modellen sämre/onödig
 
+#kommuner <-
+#  mutate(kommuner, NewParts =
+#           as.numeric(Part == "Gotaland" | Coastal == "Yes") +
+#           2*as.numeric(Part == "Svealand" & Coastal == "Yes") +
+#           3*as.numeric(Part == "Norrland" & Coastal == "No"))
+#kommuner$NewParts <- factor(kommuner$NewParts, labels = c("GotalandYes", "SvealandYes", "NorrlandNo"))
+
 kommuner <-
   mutate(kommuner, NewParts =
            as.numeric(Part == "Gotaland" & Coastal == "No") +
            2*as.numeric(Part == "Svealand" & Coastal == "No") +
            3*as.numeric(Part == "Norrland" | Coastal == "Yes"))
 kommuner$NewParts <- factor(kommuner$NewParts, labels = c("GotalandNo", "SvealandNo", "NorrlandYes"))
+
 test_model <- lm(log(PM10)~ log(Vehicles) + NewParts, data=kommuner)
 summary(test_model)
 anova(test_model,model_lev)
@@ -215,7 +223,7 @@ confint(test_model)
 numeric_vars <- sapply(kommuner, is.numeric) & names(kommuner) != "PM10"
 numeric_data <- kommuner[, numeric_vars]
 
-kommuner$log_PM10 <- log(kommuner$PM10) 
+kommuner$log_PM10 <- log(kommuner$PM10 + 1e-3)
 
 # init a list for plots
 plots <- list()
@@ -224,7 +232,7 @@ plots <- list()
 for (var in names(numeric_data)) {
   # fit 
   lin_model <- lm(log_PM10 ~ get(var), data = kommuner)
-  log_model <- lm(log_PM10 ~ log(get(var)), data = kommuner)
+  log_model <- lm(log_PM10 ~ log(get(var) + 1e-3), data = kommuner)
   
   # predict and residuals
   kommuner$yhatlin <- predict(lin_model, newdata = kommuner)
@@ -289,13 +297,15 @@ vif(model_2ee)
 ggpairs(kommuner,columns=c(5,7,8,9,10,11,15)) #remove seniors
 model_2e <- lm(log(PM10)~log(Vehicles)+log(Higheds)+Children+log(Income)+log(GRP)+NewParts, data=kommuner)
 vif(model_2e)
-
+summary(model_2e)
 
 
 ################################################################################
 ##### Part 3
 # 3(a). Leverage.
+model_linear_3a <- lm(PM10 ~ Vehicles + Higheds + Children + Income + GRP + NewParts, data = kommuner)
 kommuner_pred <- mutate(kommuner,
+                    yhat_linear = predict(model_linear_3a),    
                     yhat = predict(model_2e),
                     r = rstudent(model_2e),
                     v = hatvalues(model_2e),
@@ -311,14 +321,14 @@ top_leverage <- kommuner_pred %>%
   arrange(desc(v)) %>%
   slice(1:6)
 
-ggplot(kommuner_pred, aes(x = log(Vehicles), y = v)) +
-  facet_wrap(~NewParts) +
+ggplot(kommuner_pred, aes(x = yhat, y = v)) +
+#  facet_wrap(~NewParts) +
   geom_point(size = 2)  +
-  geom_point(data = top_leverage, aes(x = log(Vehicles), y = v), color = "red", size = 3) +  
-  geom_text(data = top_leverage, aes(x = log(Vehicles), y = v, label = Kommun), vjust = -1, color = "blue") + 
+  geom_point(data = top_leverage, aes(x = yhat, y = v), color = "red", size = 3) +  
+  geom_text(data = top_leverage, aes(x = yhat, y = v, label = Kommun), vjust = -1, color = "blue") + 
   geom_hline(yintercept = 1/n) +
   geom_hline(yintercept = 2*pplus1/n, color = "red") +
-  labs(title = "Kommuner: leverage vs log Vehicles",
+  labs(title = "Kommuner: leverage vs predictor",
        caption = "y = 1/n (black) and 2(p+1)/n (red)",
        color = "Highlight") +
   theme(legend.position = "bottom",
@@ -331,7 +341,7 @@ ggplot(kommuner_pred, aes(x = log(Vehicles), y = v)) +
 #  facet_wrap(~NewParts)
 
 # define columns with interested variables
-columns_interest <- c(5, 7, 9, 10, 11, 15)
+columns_interest <- c(5, 7, 9, 10, 11)
 column_names <- names(kommuner)[columns_interest]
 
 # plot all the combinations of x-variables
@@ -349,9 +359,14 @@ for (i in seq_along(column_names)) {
   }
 }
 
+
 # use gridExtra to arrange this plots
 do.call(gridExtra::grid.arrange, c(plot_list, ncol = length(column_names) - 1))
 
+for (p in plot_list) {
+  print(p)  
+  # ggsave(filename = paste0("path/to/save/plot_", plot_count, ".png"), plot = p, width = 10, height = 8)
+}
 
 ################################################################################
 # 3(b). Cook’s distance. 
@@ -394,10 +409,8 @@ independent_vars <- c("log(Vehicles)", "log(Higheds)", "Children", "log(Income)"
 for (var in independent_vars) {
   ggplot(kommuner_pred, aes_string(x = var, y = "log(PM10)")) +
     geom_point() +
-    geom_point(data = kommuner_pred[kommuner_pred$Kommun %in% influential_municipalities, ],
-               aes_string(x = var, y = "log(PM10)"), color = "red", size = 4) +
-    geom_text(data = kommuner_pred[kommuner_pred$Kommun %in% influential_municipalities, ],
-              aes_string(x = var, y = "log(PM10)", label = "Kommun"), vjust = -1, color = "blue") +
+    geom_point(data = top_cooks, color = "red", size = 4) +
+    geom_text(data = top_cooks, aes(label = Kommun), vjust = -1.5, color = "blue") +
     xlab(paste(var, "(1000/capita)")) +
     ylab("log(PM10) (g)") +
     labs(title = "Influence of Municipalities on PM10",
@@ -437,7 +450,7 @@ top_influential <- kommuner_pred_DFBETAS %>%
 
 # Change the y axis into df0 ~ df5, check if the resulting plot 
 # is the same as the previous plot of log(PM10) vs variables.
-ggplot(kommuner_pred_DFBETAS, aes(x t= fit, y = df4)) +
+ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = df5)) +
   geom_point(size = 2) +
   geom_point(data = filter(kommuner_pred_DFBETAS, abs(r) > 3),
              aes(color = "|r*|>3"), size = 3) +
@@ -448,7 +461,7 @@ ggplot(kommuner_pred_DFBETAS, aes(x t= fit, y = df4)) +
   geom_hline(yintercept = 0) +
   geom_hline(yintercept = sqrt(cook.limit.kommuner) * c(-1, 1), color = "red") +
   geom_hline(yintercept = 2 / sqrt(n) * c(-1, 1), color = "red", linetype = "dashed") +
-  ylab("DFBETAS for Intercept (DFBETAS_0(i))") +
+  ylab("DFBETAS for log(GRP)") +
   xlab("Fitted values") +
   labs(title = "Impact on the Intercept by Municipality",
        subtitle = "Highlighting municipalities with significant influence",
@@ -469,10 +482,13 @@ top_cooks <- kommuner_pred_DFBETAS %>%
 
 # Plot studentized residuals vs fitted values
 ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = r)) +
-  geom_point(size = 2) +
-  geom_point(data = top_cooks, aes(color = "Top Cook's D"), size = 4) +
+  geom_point(size = 2) +  # 绘制所有点
+  geom_point(data = top_cooks, aes(color = "Top Cook's D"), size = 4) +  # 突出显示Top Cook's D的点
+  geom_text(data = top_cooks, aes(label = Kommun), vjust = -1.5, color = "red") +  # 为Top Cook's D的点标注城市名
   geom_point(data = filter(kommuner_pred_DFBETAS, abs(r) > 3 & !(Kommun %in% top_cooks$Kommun)),
-             aes(color = "|r*|>3"), size = 3) +
+             aes(color = "|r*|>3"), size = 3) +  # 突出显示abs(r) > 3的点
+  geom_text(data = filter(kommuner_pred_DFBETAS, abs(r) > 3),
+            aes(label = Kommun), vjust = 1.5, color = "blue", size = 3) +  # 为abs(r) > 3的点标注城市名
   geom_hline(yintercept = 0) +
   geom_hline(yintercept = c(-2, 2)) +
   geom_hline(yintercept = c(-3, 3), linetype = "dashed") +
@@ -507,13 +523,20 @@ ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = sqrt(abs(r)))) +
 # 3(d). Explain, exclude, refit. 
 #newdata <- kommuner %>%
 #  filter(Kommun != "0481 Oxelösund")
+#remove_municipalities <- c("0481 Oxelösund", "1082 Karlshamn", "0861 Mönsterås",
+#                           "2523 Gällivare", "1480 Göteborg", "2584 Kiruna",
+#                           "1484 Lysekil", "1761 Hammarö", "2514 Kalix",
+#                           "1882 Askersund", "2284 Örnsköldsvik", "1494 Lidköping",
+#                           "1781 Kristinehamn", "2262 Timrå", "1460 Bengtsfors",
+#                           "0980 Gotland", "0319 Älvkarleby", "1885 Lindesberg",
+#                           "1272 Bromölla")
+
 remove_municipalities <- c("0481 Oxelösund", "1082 Karlshamn", "0861 Mönsterås",
-                           "2523 Gällivare", "1480 Göteborg", "2584 Kiruna",
-                           "1484 Lysekil", "1761 Hammarö", "2514 Kalix",
-                           "1882 Askersund", "2284 Örnsköldsvik", "1494 Lidköping",
-                           "1781 Kristinehamn", "2262 Timrå", "1460 Bengtsfors",
-                           "0980 Gotland", "0319 Älvkarleby", "1885 Lindesberg",
-                           "1272 Bromölla")
+                           "2523 Gällivare", "2514 Kalix", "2584 Kiruna",
+                           "1480 Göteborg", "1761 Hammarö", "1484 Lysekil",
+                           "1494 Lidköping", "1882 Askersund", "2284 Örnsköldsvik",
+                           "0319 Älvkarleby", "1460 Bengtsfors",  "1781 Kristinehamn", 
+                           "2262 Timrå",  "0980 Gotland", "1272 Bromölla",  "1885 Lindesberg")
 
 #remove_municipalities <- c("0481 Oxelösund", "1082 Karlshamn", "0861 Mönsterås",
 #                           "2523 Gällivare", "1480 Göteborg", "2584 Kiruna")
@@ -623,3 +646,4 @@ model_comparison <- data.frame(
 
 # Print the comparison table
 print(model_comparison)
+
