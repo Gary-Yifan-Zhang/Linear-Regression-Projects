@@ -11,6 +11,7 @@ library(readxl)
 library(car)
 library(GGally)
 library(gridExtra)
+library(knitr)
 
 # load data
 kommuner <- read_excel("Data/kommuner.xlsx")
@@ -108,7 +109,11 @@ ggplot(kom_ints, aes(x = Vehicles)) +
 # 1(c). #
 # Beta and s.e.
 beta1 <- coef(ll_model)["log(Vehicles)"]
+beta0 <- coef(ll_model)["Intercept"]
 beta1_se <- summary(ll_model)$coefficients["log(Vehicles)", "Std. Error"]
+
+summary(ll_model)
+confint(ll_model)
 
 # ln(0.9)
 ln_0_9 <- log(0.9)
@@ -124,13 +129,31 @@ z_value <- qnorm(0.975)
 ci_lower <- percent_change_PM10 - z_value * beta1_se * 10
 ci_upper <- percent_change_PM10 + z_value * beta1_se * 10
 
-# To determine the reduction in vehicles needed to halve PM10 emissions
-required_reduction <- exp((log(0.5) / beta1) - 1)
-
 cat("Expected change in PM10 for a 10% decrease in vehicles:", percent_change_PM10, "%\n")
 cat("95% CI for this change rate: [", ci_lower, ",", ci_upper, "]\n")
-cat("Reduction in vehicles needed to halve PM10 emissions:", required_reduction * 100, "%\n")
 
+# To determine the reduction in vehicles needed to halve PM10 emissions
+ln_0_5 <- log(0.5)
+
+percentage_change_x <- exp(ln_0_5 / beta1) * 100 
+
+
+# VI
+beta1_low <- beta1 - 1.96 * beta1_se # 1.170085
+beta1_high <- beta1 + 1.96 * beta1_se # 1.403780
+
+
+x_change_low <- exp(ln_0_5 / 1.403780)  # beta1 upper limit
+x_change_high <- exp(ln_0_5 / 1.170085)  # beta1 lower limit
+
+
+print(paste("X needs to decrease by approximately between", 
+            round(x_change_low*100, 2), 
+            "% and", 
+            round(x_change_high*100, 2), 
+            "% with 95% confidence."))
+
+print(paste("X needs to decrease by approximately", round(percentage_change_x, 2), "%"))
 
 
 ################################################################################
@@ -198,19 +221,21 @@ summary(model_lev)
 ## göra anova med den nya reducerade modellen, stort F värden 
 # så är den större modellen sämre/onödig
 
-#kommuner <-
-#  mutate(kommuner, NewParts =
-#           as.numeric(Part == "Gotaland" | Coastal == "Yes") +
-#           2*as.numeric(Part == "Svealand" & Coastal == "Yes") +
-#           3*as.numeric(Part == "Norrland" & Coastal == "No"))
-#kommuner$NewParts <- factor(kommuner$NewParts, labels = c("GotalandYes", "SvealandYes", "NorrlandNo"))
-
 kommuner <-
   mutate(kommuner, NewParts =
-           as.numeric(Part == "Gotaland" & Coastal == "No") +
+           as.numeric(Part == "Gotaland" | Coastal == "Yes") +
+#            as.numeric(Part == "Gotaland") +
            2*as.numeric(Part == "Svealand" & Coastal == "No") +
-           3*as.numeric(Part == "Norrland" | Coastal == "Yes"))
-kommuner$NewParts <- factor(kommuner$NewParts, labels = c("GotalandNo", "SvealandNo", "NorrlandYes"))
+           3*as.numeric(Part == "Norrland" & Coastal == "No"))
+kommuner$NewParts <- factor(kommuner$NewParts, labels = c("GotalandYes", "SvealandNo",
+                                                          "NorrlandNo"))
+
+#kommuner <-
+#  mutate(kommuner, NewParts =
+#           as.numeric(Part == "Gotaland" & Coastal == "No") +
+#           2*as.numeric(Part == "Svealand" & Coastal == "No") +
+#           3*as.numeric(Part == "Norrland" | Coastal == "Yes"))
+#kommuner$NewParts <- factor(kommuner$NewParts, labels = c("GotalandNo", "SvealandNo", "NorrlandYes"))
 
 test_model <- lm(log(PM10)~ log(Vehicles) + NewParts, data=kommuner)
 summary(test_model)
@@ -436,6 +461,15 @@ top_cooks <- kommuner_pred_DFBETAS %>%
   arrange(desc(D)) %>%
   slice(1:6)
 
+# DFBETAS of Municipalities with top cook's distance 
+top_cooks_DFBETAS <- kommuner_pred_DFBETAS %>%
+  arrange(desc(D)) %>%
+  slice(1:6) %>%
+  select(Kommun, D, df0, df1, df2, df3, df4, df5)
+
+print(top_cooks_DFBETAS)
+
+
 highlightshapes <- c("Cook's D>0.1" = 24)
 highlightcolors <- c("|r*|>3" = "red",
                      "length>200" = "magenta", 
@@ -450,7 +484,7 @@ top_influential <- kommuner_pred_DFBETAS %>%
 
 # Change the y axis into df0 ~ df5, check if the resulting plot 
 # is the same as the previous plot of log(PM10) vs variables.
-ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = df5)) +
+ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = df2)) +
   geom_point(size = 2) +
   geom_point(data = filter(kommuner_pred_DFBETAS, abs(r) > 3),
              aes(color = "|r*|>3"), size = 3) +
@@ -461,7 +495,7 @@ ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = df5)) +
   geom_hline(yintercept = 0) +
   geom_hline(yintercept = sqrt(cook.limit.kommuner) * c(-1, 1), color = "red") +
   geom_hline(yintercept = 2 / sqrt(n) * c(-1, 1), color = "red", linetype = "dashed") +
-  ylab("DFBETAS for log(GRP)") +
+  ylab("DFBETAS for log(Higheds)") +
   xlab("Fitted values") +
   labs(title = "Impact on the Intercept by Municipality",
        subtitle = "Highlighting municipalities with significant influence",
@@ -482,13 +516,13 @@ top_cooks <- kommuner_pred_DFBETAS %>%
 
 # Plot studentized residuals vs fitted values
 ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = r)) +
-  geom_point(size = 2) +  # 绘制所有点
-  geom_point(data = top_cooks, aes(color = "Top Cook's D"), size = 4) +  # 突出显示Top Cook's D的点
-  geom_text(data = top_cooks, aes(label = Kommun), vjust = -1.5, color = "red") +  # 为Top Cook's D的点标注城市名
+  geom_point(size = 2) +  
+  geom_point(data = top_cooks, aes(color = "Top Cook's D"), size = 4) + 
+  geom_text(data = top_cooks, aes(label = Kommun), vjust = -1.5, color = "red") + 
   geom_point(data = filter(kommuner_pred_DFBETAS, abs(r) > 3 & !(Kommun %in% top_cooks$Kommun)),
              aes(color = "|r*|>3"), size = 3) +  # 突出显示abs(r) > 3的点
   geom_text(data = filter(kommuner_pred_DFBETAS, abs(r) > 3),
-            aes(label = Kommun), vjust = 1.5, color = "blue", size = 3) +  # 为abs(r) > 3的点标注城市名
+            aes(label = Kommun), vjust = 1.5, color = "blue", size = 3) +  
   geom_hline(yintercept = 0) +
   geom_hline(yintercept = c(-2, 2)) +
   geom_hline(yintercept = c(-3, 3), linetype = "dashed") +
@@ -521,22 +555,13 @@ ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = sqrt(abs(r)))) +
 
 ################################################################################
 # 3(d). Explain, exclude, refit. 
-#newdata <- kommuner %>%
-#  filter(Kommun != "0481 Oxelösund")
-#remove_municipalities <- c("0481 Oxelösund", "1082 Karlshamn", "0861 Mönsterås",
-#                           "2523 Gällivare", "1480 Göteborg", "2584 Kiruna",
-#                           "1484 Lysekil", "1761 Hammarö", "2514 Kalix",
-#                           "1882 Askersund", "2284 Örnsköldsvik", "1494 Lidköping",
-#                           "1781 Kristinehamn", "2262 Timrå", "1460 Bengtsfors",
-#                           "0980 Gotland", "0319 Älvkarleby", "1885 Lindesberg",
-#                           "1272 Bromölla")
-
 remove_municipalities <- c("0481 Oxelösund", "1082 Karlshamn", "0861 Mönsterås",
                            "2523 Gällivare", "2514 Kalix", "2584 Kiruna",
                            "1480 Göteborg", "1761 Hammarö", "1484 Lysekil",
                            "1494 Lidköping", "1882 Askersund", "2284 Örnsköldsvik",
                            "0319 Älvkarleby", "1460 Bengtsfors",  "1781 Kristinehamn", 
-                           "2262 Timrå",  "0980 Gotland", "1272 Bromölla",  "1885 Lindesberg")
+                           "2262 Timrå",  "0980 Gotland", "1272 Bromölla",  
+                           "1885 Lindesberg", "1764 Grums")
 
 #remove_municipalities <- c("0481 Oxelösund", "1082 Karlshamn", "0861 Mönsterås",
 #                           "2523 Gällivare", "1480 Göteborg", "2584 Kiruna")
