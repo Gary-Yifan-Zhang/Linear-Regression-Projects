@@ -137,15 +137,12 @@ ln_0_5 <- log(0.5)
 
 percentage_change_x <- exp(ln_0_5 / beta1) * 100 
 
-
 # VI
 beta1_low <- beta1 - 1.96 * beta1_se # 1.170085
 beta1_high <- beta1 + 1.96 * beta1_se # 1.403780
 
-
 x_change_low <- exp(ln_0_5 / 1.403780)  # beta1 upper limit
 x_change_high <- exp(ln_0_5 / 1.170085)  # beta1 lower limit
-
 
 print(paste("X needs to decrease by approximately between", 
             round(x_change_low*100, 2), 
@@ -463,7 +460,7 @@ ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = r)) +
   geom_point(data = top_cooks, aes(color = "Top Cook's D"), size = 4) + 
   geom_text(data = top_cooks, aes(label = Kommun), vjust = -1.5, color = "red") + 
   geom_point(data = filter(kommuner_pred_DFBETAS, abs(r) > 3 & !(Kommun %in% top_cooks$Kommun)),
-             aes(color = "|r*|>3"), size = 3) +  # 突出显示abs(r) > 3的点
+             aes(color = "|r*|>3"), size = 3) + 
   geom_text(data = filter(kommuner_pred_DFBETAS, abs(r) > 3),
             aes(label = Kommun), vjust = 1.5, color = "blue", size = 3) +  
   geom_hline(yintercept = 0) +
