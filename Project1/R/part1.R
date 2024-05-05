@@ -244,66 +244,6 @@ confint(test_model)
 
 
 ### 2(d)
-# get all the numerical vars
-numeric_vars <- sapply(kommuner, is.numeric) & names(kommuner) != "PM10"
-numeric_data <- kommuner[, numeric_vars]
-
-kommuner$log_PM10 <- log(kommuner$PM10 + 1e-3)
-
-# init a list for plots
-plots <- list()
-
-# get all the plots of all the numerical variables
-for (var in names(numeric_data)) {
-  # fit 
-  lin_model <- lm(log_PM10 ~ get(var), data = kommuner)
-  log_model <- lm(log_PM10 ~ log(get(var) + 1e-3), data = kommuner)
-  
-  # predict and residuals
-  kommuner$yhatlin <- predict(lin_model, newdata = kommuner)
-  kommuner$yhatlog <- predict(log_model, newdata = kommuner)
-  kommuner$elin <- resid(lin_model)
-  kommuner$elog <- resid(log_model)
-  
-  # plot all 
-  p1 <- ggplot(kommuner, aes_string(x = var, y = "log_PM10")) +
-    geom_point() +
-    ggtitle(paste("Relationship of", var, "with log(PM10)"))
-  
-  p2 <- ggplot(kommuner, aes_string(x = paste0("log(", var, "+1e-6)"), y = "log_PM10")) +
-    geom_point() +
-    ggtitle(paste("Log relationship of", var, "with log(PM10)"))
-  
-  p3 <- ggplot(kommuner, aes(x = yhatlin, y = elin)) +
-    geom_point() +
-    geom_hline(yintercept = 0) +
-    ggtitle("Residual Plot without Log")
-  
-  p4 <- ggplot(kommuner, aes(x = yhatlog, y = elog)) +
-    geom_point() +
-    geom_hline(yintercept = 0) +
-    ggtitle("Residual Plot with Log")
-  
-  p5 <- ggplot(data = kommuner, aes(sample = elin)) +
-    geom_qq() +
-    geom_qq_line() +
-    ggtitle("Normal Q-Q-plot of the residuals without Log")
-  
-  p6 <- ggplot(data = kommuner, aes(sample = elog)) +
-    geom_qq() +
-    geom_qq_line() +
-    ggtitle("Normal Q-Q-plot of the residuals with Log")
-  
-  # Combine plots into a grid
-  combined_plot <- gridExtra::grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 2)
-  plots[[var]] <- combined_plot
-}
-
-for (var in names(plots)) {
-  print(plots[[var]])  
-  # ggsave(paste0("plot_", var, ".png"), plot = plots[[var]])  # save the plots
-}
-
 # Higheds, Builton
 model_x <- lm(log(PM10)~ log(Vehicles)+log(Higheds)+log(Builton), data=kommuner)
 summary(model_x)
@@ -317,10 +257,12 @@ confint(model_2d)
 vif(model_2d)
 
 ### 2(e)
-model_2ee <- lm(log(PM10)~log(Vehicles)+log(Higheds)+Children+Seniors+log(Income)+log(GRP)+NewParts, data=kommuner)
+model_2ee <- lm(log(PM10)~log(Vehicles)+log(Higheds)+Children+Seniors+log(Income)+
+                  log(GRP)+NewParts, data=kommuner)
 vif(model_2ee)
 ggpairs(kommuner,columns=c(5,7,8,9,10,11,15)) #remove seniors
-model_2e <- lm(log(PM10)~log(Vehicles)+log(Higheds)+Children+log(Income)+log(GRP)+NewParts, data=kommuner)
+model_2e <- lm(log(PM10)~log(Vehicles)+log(Higheds)+Children+log(Income)+log(GRP)+
+                 NewParts, data=kommuner)
 vif(model_2e)
 summary(model_2e)
 
@@ -328,7 +270,8 @@ summary(model_2e)
 ################################################################################
 ##### Part 3
 # 3(a). Leverage.
-model_linear_3a <- lm(PM10 ~ Vehicles + Higheds + Children + Income + GRP + NewParts, data = kommuner)
+model_linear_3a <- lm(PM10 ~ Vehicles + Higheds + Children + Income + GRP + 
+                        NewParts, data = kommuner)
 kommuner_pred <- mutate(kommuner,
                     yhat_linear = predict(model_linear_3a),    
                     yhat = predict(model_2e),
@@ -350,7 +293,8 @@ ggplot(kommuner_pred, aes(x = yhat, y = v)) +
 #  facet_wrap(~NewParts) +
   geom_point(size = 2)  +
   geom_point(data = top_leverage, aes(x = yhat, y = v), color = "red", size = 3) +  
-  geom_text(data = top_leverage, aes(x = yhat, y = v, label = Kommun), vjust = -1, color = "blue") + 
+  geom_text(data = top_leverage, aes(x = yhat, y = v, label = Kommun), 
+            vjust = -1, color = "blue") + 
   geom_hline(yintercept = 1/n) +
   geom_hline(yintercept = 2*pplus1/n, color = "red") +
   labs(title = "Kommuner: leverage vs predictor",
@@ -390,7 +334,6 @@ do.call(gridExtra::grid.arrange, c(plot_list, ncol = length(column_names) - 1))
 
 for (p in plot_list) {
   print(p)  
-  # ggsave(filename = paste0("path/to/save/plot_", plot_count, ".png"), plot = p, width = 10, height = 8)
 }
 
 ################################################################################
