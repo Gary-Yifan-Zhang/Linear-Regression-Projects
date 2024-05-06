@@ -234,7 +234,7 @@ se.b1 <- model_1c_sum$coefficients[2, "Std. Error"]
 z.b1 <- model_1c_sum$coefficients[2, "z value"]
 
 b0 <- model_1c_sum$coefficients[1, "Estimate"]
-se.b0 <- model_1b_sum$coefficients[1, "Std. Error"]
+se.b0 <- model_1c_sum$coefficients[1, "Std. Error"]
 # z.b0 = 4.541837, 4.54 > 1.96, reject H0
 z.b0 <- model_1c_sum$coefficients[1, "z value"]
 
@@ -294,3 +294,91 @@ collect.AICetc |> mutate(
   R2McF = 1 - loglik/lnL0,
   R2McF.adj = 1 - (loglik - (df - 1)/2)/lnL0) -> collect.AICetc
 collect.AICetc
+
+
+#############################################################
+#############################################################
+## Part 2. Variable selection and influential observations ##
+#############################################################
+#############################################################
+
+### 2(a). Imputation of missing data ###
+kommuner <- read_excel("Data/kommunerProject2.xlsx")
+summary(kommuner)
+
+kommuner |> mutate(highcars = as.numeric(Cars > 600)) -> kommuner
+
+kommuner <- mutate(kommuner,
+                   highcars_cat = factor(highcars,
+                                         levels = c(0, 1),
+                                         labels = c("low", "high")))
+
+kommuner |> mutate(Fertility = as.numeric(Fertility)) -> kommuner
+
+kommuner |> filter(Part == 3 & Coastal == 0) |>
+  summarise(meanfertility = mean(Fertility, na.rm = TRUE))
+I <- which(is.na(kommuner$Fertility))
+kommuner$Fertility[I] <- 1.57 # 1.57
+
+
+### 2(b). Variable selection ###
+model_full <- glm(highcars ~ log(Higheds) + Children + Seniors + log(Income) + 
+                    log(GRP) + Persperhh + Fertility + Urban + Transit + Apartments, 
+                  family = "binomial", 
+                  data = kommuner)
+summary(model_full)
+model_full_sum <- summary(model_full)
+vif(model_full)
+
+
+model_null <- glm(highcars ~ 1, family = "binomial", data = kommuner)
+
+# AIC stepwise selection
+model_aic <- step(model_null,
+                       scope = list(lower = model_null, upper = model_full),
+                       direction = "both",
+                       trace = TRUE,  # trace=TRUE detail information for every steps
+                       k = 2)  # k=2 means using AIC
+
+model_aic_sum <- summary(model_aic)
+
+summary(model_aic)
+
+
+# BIC stepwise selection
+model_bic <- step(model_null,
+                       scope = list(lower = model_null, upper = model_full),
+                       direction = "both",
+                       trace = TRUE,
+                       k =  log(nobs(model_full)))  # BIC
+model_bic_sum <- summary(model_bic)
+
+vif(model_aic)
+vif(model_bic)
+
+## Significance
+# Wald test for beta_j
+# lambda = 1.96
+lambda <- qnorm(1 - 0.05/2)
+model_aic_sum$coefficients
+
+# Fertility
+b6 <- model_aic_sum$coefficients[6, "Estimate"]
+se.b6 <- model_aic_sum$coefficients[6, "Std. Error"]
+# z.b6 = -1.811141, 1.81 < 1.96, reject H1
+z.b6 <- model_aic_sum$coefficients[6, "z value"]
+
+# Transit
+b0 <- model_aic_sum$coefficients[7, "Estimate"]
+se.b0 <- model_aic_sum$coefficients[7, "Std. Error"]
+# z.b0 = -1.513786, 1.51 < 1.96, reject H1
+z.b0 <- model_aic_sum$coefficients[7, "z value"]
+
+# P-value
+# Fertility Pr(>|z|)=0.070119 > 0.05, reject H1
+# Transit Pr(>|z|) = 0.130080 > 0.05, reject H1
+model_aic_sum
+
+
+### 2(c). Influential observations ###
+
