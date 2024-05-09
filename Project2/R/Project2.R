@@ -16,13 +16,14 @@ library(tidyr)
 library(tidyverse)
 library(caret)
 library(pROC)
+# library(MASS)
 library(ResourceSelection)
 
 # load data
 kommuner <- read_excel("data/kommunerProject2.xlsx")
 summary(kommuner)
 
-### 1a ###
+##### 1a #####
 
 kommuner |> mutate(highcars = as.numeric(Cars > 600)) -> kommuner
 
@@ -68,7 +69,7 @@ table_1a <- table_1a %>%
 table_1a
 
 
-### 1b ###
+##### 1b #####
 # Fit the logistic regression model
 model_1b <- glm(highcars_cat ~ Part, family = "binomial", data = kommuner)
 model_1b_sum <- summary(model_1b)
@@ -158,7 +159,7 @@ table_1b <- pred_1b %>%
 table_1b |> round(digits = 3)
 
 
-### 1c ###
+##### 1c #####
 # Plot with smooth
 ggplot(kommuner, aes(Transit, highcars)) +
   geom_point() +
@@ -255,7 +256,9 @@ Pvalue <- pchisq(q = D_diff, df = df_diff, lower.tail = FALSE)
 
 cbind(D_diff, df_diff, chi2_alpha, Pvalue)
 
-### 1d ###
+
+
+##### 1d #####
 model_1c_infl <- influence(model_1c)
 glimpse(model_1c_infl)
 
@@ -285,7 +288,7 @@ ggplot(pred_1c, aes(x = Transit, y = v)) +
   theme(legend.position = "top",
         text = element_text(size = 14))
 
-### 1e ###
+##### 1e #####
 table(kommuner$Part, kommuner$Transit)
 
 aic <- AIC(model_1b, model_1c)
@@ -314,7 +317,7 @@ collect.AICetc
 #############################################################
 #############################################################
 
-### 2(a). Imputation of missing data ###
+##### 2(a). Imputation of missing data #####
 kommuner <- read_excel("Data/kommunerProject2.xlsx")
 summary(kommuner)
 
@@ -333,9 +336,9 @@ I <- which(is.na(kommuner$Fertility))
 kommuner$Fertility[I] <- 1.57 # meanfertility = 1.57
 
 
-### 2(b). Variable selection ###
+##### 2(b). Variable selection #####
 model_full <- glm(highcars ~ log(Higheds) + Children + Seniors + log(Income) + 
-                    log(GRP) + Persperhh + Fertility + Urban + Transit + Apartments, 
+                    log(GRP) + Persperhh + Fertility + Urban + Transit + log(Apartments), 
                   family = "binomial", 
                   data = kommuner)
 summary(model_full)
@@ -378,18 +381,18 @@ model_aic_sum$coefficients
 # Fertility
 b6 <- model_aic_sum$coefficients[6, "Estimate"]
 se.b6 <- model_aic_sum$coefficients[6, "Std. Error"]
-# z.b6 = -1.811141, 1.81 < 1.96, reject H1
+# z.b6 = -1.882, 1.882 < 1.96, reject H1
 z.b6 <- model_aic_sum$coefficients[6, "z value"]
 
 # Transit
 b0 <- model_aic_sum$coefficients[7, "Estimate"]
 se.b0 <- model_aic_sum$coefficients[7, "Std. Error"]
-# z.b0 = -1.513786, 1.51 < 1.96, reject H1
+# z.b0 = -1.721, 1.721 < 1.96, reject H1
 z.b0 <- model_aic_sum$coefficients[7, "z value"]
 
 # P-value
-# Fertility Pr(>|z|)=0.070119 > 0.05, reject H1
-# Transit Pr(>|z|) = 0.130080 > 0.05, reject H1
+# Fertility Pr(>|z|)=0.05978  > 0.05, reject H1
+# Transit Pr(>|z|) = 0.08518 > 0.05, reject H1
 model_aic_sum
 
 # LR-test
@@ -403,7 +406,7 @@ chi2_alpha <- qchisq(1 - 0.05, df_diff)
 Pvalue <- pchisq(D_diff, df_diff, lower.tail = FALSE)
 cbind(D_diff, df_diff, chi2_alpha, Pvalue)
 
-### AIC and BIC #####
+### AIC and BIC ###
 aic <- AIC(model_aic,model_bic)
 bic <- BIC(model_aic,model_bic)
 collect.AICetc <- data.frame(aic, bic)
@@ -430,7 +433,7 @@ collect.AICetc
 model_2b <- model_bic
 
 
-### 2(c). Influential observations ###
+##### 2(c). Influential observations #####
 model_2b_infl <- influence(model_2b)
 glimpse(model_2b_infl)
 
@@ -548,7 +551,7 @@ ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = df2)) +
   scale_shape_manual(values = highlightshapes)
 
 
-## 2(d). Deviance residuals ###
+##### 2(d). Deviance residuals #####
 model_2b_pred |> mutate(devresid = model_2b_infl$dev.res,
                     stddevresid = devresid/sqrt(1 - v)) -> model_2b_pred
 glimpse(model_2b_pred)
