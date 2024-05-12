@@ -291,13 +291,16 @@ ggplot(pred_1c, aes(x = Transit, y = v)) +
 ##### 1e #####
 table(kommuner$Part, kommuner$Transit)
 
+# Model Null
+model_null <- glm(highcars ~ 1, family = "binomial", data = kommuner)
+
 aic <- AIC(model_1b, model_1c)
 bic <- BIC(model_1b, model_1c)
 collect.AICetc <- data.frame(aic, bic)
 collect.AICetc |> mutate(df.1 = NULL) -> collect.AICetc
 collect.AICetc
 
-lnL0 <- logLik(model_1b)[1]
+lnL0 <- logLik(model_null)[1]
 lnL0
 
 collect.AICetc |> mutate(
@@ -413,7 +416,7 @@ collect.AICetc <- data.frame(aic, bic)
 collect.AICetc |> mutate(df.1 = NULL) -> collect.AICetc
 collect.AICetc
 
-### Pseudo R2 ####
+### Pseudo R2 ###
 model_null_glm <- glm(highcars ~ 1, family = "binomial", data = kommuner)
 
 # log likelihood
@@ -455,32 +458,58 @@ ggplot(model_2b_pred, aes(x = xbeta, y = v)) +
 
 # Find the highest leverages
 highest_leverages <- model_2b_pred %>%
-  slice_max(v, n = 6)
-model_2b_pred |> slice_max(v, n = 6)
+  slice_max(v, n = 8)
+model_2b_pred |> slice_max(v, n = 8)
+
 ggplot(model_2b_pred, aes(x = xbeta, y = v)) +
   geom_point() +
-  geom_point(data = filter(model_2b_pred, v > 0.07), aes(color = "v > 0.07"), size = 3) +
+  geom_point(data = filter(model_2b_pred, v > 0.06), aes(color = "v > 0.06"), size = 3) +
   geom_point(data = highest_leverages, aes(color = "Highest Leverages"), size = 4) +
   geom_hline(yintercept = c(2*pplus1_2b/n)) +
+  geom_hline(yintercept = 0.06, linetype = "dashed", color = "red") +
   facet_wrap(~ highcars) +
-  labs(color = "Highlight", title = "Leverage vs linear predictor by Y=0/Y=1") +
+  labs(color = "Highlight", title = "Leverage vs linear predictor by Y=0/Y=1", 
+       caption = "v > 0.06 = Red points, Highest Leverages = Blue points\n
+       Dashed red line: v = 0.06, Horizontal line: 2*pplus1_2b/n") +
   theme(legend.position = "top", text = element_text(size = 14))
-
 
 # Cook's Distance 
 model_2b_pred <- mutate(model_2b_pred, 
                     Dcook = cooks.distance(model_2b))
 
+top_cooks <- kommuner_pred_DFBETAS %>%
+  arrange(desc(D)) %>%
+  slice(1:6)
+
+# Filter kummor with Cook's Distance > 4/n
+high_cooks <- filter(model_2b_pred, Dcook > 4/n) 
+
+# Create a table of kummor and Cook's Distance above threshold
+high_cooks <- high_cooks[, c("Kommun", "D")]
+
+# Print the table
+high_cooks
+
+# DFBETAS of Municipalities with top cook's distance 
 ggplot(model_2b_pred, aes(x = xbeta, y = Dcook, color = as.factor(highcars))) +
   geom_point() +
-  geom_point(data = filter(model_2b_pred, v > 0.045), shape = 24,
+  geom_point(data = filter(model_2b_pred, v > 0.06), shape = 24,
              color = "black", size = 3) +
+  geom_point(data = top_cooks, shape = 19,
+             color = "red", size = 3) +
   geom_hline(yintercept = 4/n) +
+  #  geom_hline(yintercept = 1) +
   facet_grid(cols = vars(highcars)) +
-  labs(color = "Y = 0/1") +
-  geom_text(data = filter(model_2b_pred, Dcook > 4/n),
+  labs(color = "Y = 0/1",
+       title = "Scatter plot of Cook's Distance against xbeta",
+       x = "xbeta",
+       y = "Cook's Distance",
+       caption = "Black points represent outliers with v > 0.06.\n
+       Red points indicate top Cook's Distance municipalities") +
+  geom_text(data = top_cooks,
             aes(label = Kommun),
-            nudge_y = 0.01,
+            nudge_x = -6,
+            nudge_y = 0,
             hjust = 0) +
   theme(axis.text.x = element_blank())
 
@@ -495,24 +524,19 @@ kommuner_pred_DFBETAS <- mutate(
   model_2b_pred,
   df0 = dfbetas(model_2b)[, "(Intercept)"],
   df1 = dfbetas(model_2b)[, "Urban"],
-  df2 = dfbetas(model_2b)[, "Apartments"],
+  df2 = dfbetas(model_2b)[, "log(Apartments)"],
   df3 = dfbetas(model_2b)[, "Persperhh"],
   df4 = dfbetas(model_2b)[, "log(Income)"],
   fit = predict(model_2b),
   r = rstudent(model_2b),
   D = cooks.distance(model_2b))
 
-top_cooks <- kommuner_pred_DFBETAS %>%
-  arrange(desc(D)) %>%
-  slice(1:6)
+topcooks_DFBETAS <- top_cooks_DFBETAS[, c("Kommun", "D", "df0", "df1", "df2", "df3", "df4")]
 
-# DFBETAS of Municipalities with top cook's distance 
-top_cooks_DFBETAS <- kommuner_pred_DFBETAS %>%
-  arrange(desc(D)) %>%
-  slice(1:6) %>%
-  select(Kommun, D, df0, df1, df2, df3, df4)
+topcooks_DFBETAS_round <- topcooks_DFBETAS
+topcooks_DFBETAS_round[, -1] <- round(topcooks_DFBETAS[, -1], 3)
 
-print(top_cooks_DFBETAS)
+print(topcooks_DFBETAS_round)
 
 
 highlightshapes <- c("Cook's D>0.1" = 24)
@@ -527,9 +551,9 @@ top_influential <- kommuner_pred_DFBETAS %>%
   arrange(desc(abs(df2))) %>%
   slice(1:6)
 
-# Change the y axis into df0 ~ df5, check if the resulting plot 
+# Change the y axis into df0 ~ df4, check if the resulting plot 
 # is the same as the previous plot of log(PM10) vs variables.
-ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = df2)) +
+ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = df4)) +
   geom_point(size = 2) +
   geom_point(data = filter(kommuner_pred_DFBETAS, abs(r) > 3),
              aes(color = "|r*|>3"), size = 3) +
@@ -540,9 +564,9 @@ ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = df2)) +
   geom_hline(yintercept = 0) +
   geom_hline(yintercept = sqrt(cook.limit.kommuner) * c(-1, 1), color = "red") +
   geom_hline(yintercept = 2 / sqrt(n) * c(-1, 1), color = "red", linetype = "dashed") +
-  ylab("DFBETAS for log(Higheds)") +
+  ylab("DFBETAS for log(Income)") +
   xlab("Fitted values") +
-  labs(title = "Impact on the Intercept by Municipality",
+  labs(title = "Impact on the log(Income) by Municipality",
        subtitle = "Highlighting municipalities with significant influence",
        caption = "Red lines indicate critical values for influence") +
   theme(text = element_text(size = 18), 
@@ -550,6 +574,8 @@ ggplot(kommuner_pred_DFBETAS, aes(x = fit, y = df2)) +
   scale_color_manual(values = highlightcolors) +
   scale_shape_manual(values = highlightshapes)
 
+dfbetas_rounded <- round(dfbetas(model_2b), 4)
+head(dfbetas_rounded)
 
 ##### 2(d). Deviance residuals #####
 model_2b_pred |> mutate(devresid = model_2b_infl$dev.res,
@@ -560,25 +586,45 @@ glimpse(model_2b_pred)
 ggplot(model_2b_pred, aes(sample = stddevresid)) +
   geom_qq() + geom_qq_line()
 
-# Plot the standardized deviance residuals against the linear predictor
-ggplot(model_2b_pred, aes(x = xbeta, 
-                      y = stddevresid, 
-                      color = as.factor(highcars))) +
-  geom_point() +
-  geom_hline(yintercept = c(-3, -2, 0, 2, 3), linetype = "dashed")
-
 top_cooks <- model_2b_pred %>%
   arrange(desc(D)) %>%
   slice(1:6)
 
+large_res <- model_2b_pred %>% filter(stddevresid > 3 | stddevresid < -3)
+
+# Plot the standardized deviance residuals against the linear predictor
+ggplot(model_2b_pred, aes(x = xbeta, 
+                          y = stddevresid, 
+                          color = as.factor(highcars))) +
+  geom_point() +
+  geom_point(data = top_cooks, color = "blue", size = 4) +
+  geom_text(data = top_cooks,
+            aes(label = Kommun),
+            nudge_x = -3,
+            nudge_y = 0.01,
+            hjust = 0) +
+  geom_hline(yintercept = c(-3, -2, 0, 2, 3), linetype = "dashed") +
+  labs(title = "Plot of Standardized Deviance Residuals against Linear Predictor",
+       x = "Linear Predictor (xbeta)",
+       y = "Standardized Deviance Residuals",
+       color = "Y = 0/1",
+       caption = "Blue points represent top Cook's Distance municipalities\n
+       Horizontal lines at y = ±2, ±3")
+
 # Plot the standardized deviance residuals vs Urban
 # We need to plot all the x-variables
-# Urban   Apartments    Persperhh  log(Income)
-ggplot(model_2b_pred, aes(x = Urban, y = stddevresid, 
+# Urban   log(Apartments)    Persperhh  log(Income)
+ggplot(model_2b_pred, aes(x = Persperhh , y = stddevresid, 
                       color = as.factor(highcars))) +
   geom_point() +
   geom_hline(yintercept = c(-3, -2, 0, 2, 3), linetype = "dashed") +
   geom_point(data = top_cooks, color = "green", size = 4) +
+  labs(title = "Plot of Standardized Deviance Residuals against Persperhh",
+       x = "Persperhh",
+       y = "Standardized Deviance Residuals",
+       color = "Y = 0/1",
+       caption = "Green points represent top Cook's Distance municipalities\n
+       Horizontal lines at y = ±2, ±3") +
   geom_text(data = top_cooks, aes(label = Kommun), vjust = -1.5, color = "blue") 
 
 
@@ -588,7 +634,9 @@ ggplot(model_2b_pred, aes(x = Urban, y = stddevresid,
 #############################################################
 #############################################################
 
-### 3(a). Confusion ###
+##### 3(a). Confusion #####
+
+
 pred_phat <- cbind(
   kommuner,
   p_null = predict(model_null, type = "response"),
@@ -627,14 +675,14 @@ cm_bic <- confusionMatrix(data = model_predictions$yhat_bic, reference = model_p
 cm_aic <- confusionMatrix(data = model_predictions$yhat_aic, reference = model_predictions$highcars_cat, positive = "high")
 cm_full <- confusionMatrix(data = model_predictions$yhat_full, reference = model_predictions$highcars_cat, positive = "high")
 
-### Confusion matrix #####
+### Confusion matrix ###
 # Create a table to collect the metrics
 # Extract needed statistics from each confusion matrix 
 extract_stats <- function(cm) { 
   list( Accuracy = cm$overall['Accuracy'], 
   P_Value_Acc_Greater_NIR = cm$overall['AccuracyPValue'], 
   Cohen_Kappa = cm$overall['Kappa'], 
-  P_Value_McNemars = cm$byClass['Mcnemar P-Value'], 
+  P_Value_McNemars = cm$overall['McnemarPValue'], 
   Sensitivity = cm$byClass['Sensitivity'], 
   Specificity = cm$byClass['Specificity'] ) } 
 
@@ -652,19 +700,19 @@ table_3a <- data.frame(
   Accuracy = c(stats_null$Accuracy, stats_1b$Accuracy, 
                stats_1c$Accuracy, stats_bic$Accuracy, 
                stats_aic$Accuracy, stats_full$Accuracy),
-  P_Value_Acc = c(stats_null$P_Value_Acc_Greater_NIR, 
+  AccuracyPValue = c(stats_null$P_Value_Acc_Greater_NIR, 
                   stats_1b$P_Value_Acc_Greater_NIR, 
                   stats_1c$P_Value_Acc_Greater_NIR, 
                   stats_bic$P_Value_Acc_Greater_NIR, 
                   stats_aic$P_Value_Acc_Greater_NIR, 
                   stats_full$P_Value_Acc_Greater_NIR), 
-  Cohen_Kappa = c(stats_null$Cohen_Kappa, 
+  Kappa = c(stats_null$Cohen_Kappa, 
                   stats_1b$Cohen_Kappa, 
                   stats_1c$Cohen_Kappa, 
                   stats_bic$Cohen_Kappa, 
                   stats_aic$Cohen_Kappa, 
                   stats_full$Cohen_Kappa), 
-  P_Value_McNemars = c(stats_null$P_Value_McNemars, 
+  McnemarPValue = c(stats_null$P_Value_McNemars, 
                        stats_1b$P_Value_McNemars, 
                        stats_1c$P_Value_McNemars, 
                        stats_bic$P_Value_McNemars, 
@@ -678,7 +726,7 @@ table_3a <- data.frame(
                   stats_aic$Specificity, stats_full$Specificity) )
 table_3a
 
-### 3(b). ROC-curves and AUC ###
+##### 3(b). ROC-curves and AUC #####
 roc_null <- roc(highcars ~ p_null, data = pred_phat)
 roc_null
 glimpse(roc_null)
@@ -745,7 +793,7 @@ aucs
 
 roc_2b <- roc_bic
 
-### pair-wise tests comparing the AUC #####
+### pair-wise tests comparing the AUC ###
 # Perform ROC tests
 test_2b_vs_null = roc.test(roc_null, roc_2b)
 test_2b_vs_1b = roc.test(roc_1b, roc_2b)
@@ -763,7 +811,7 @@ roc_comparison_results <- data.frame(
 
 roc_comparison_results
 
-### 3(c). Optimal thresholds ###
+##### 3(c). Optimal thresholds #####
 extract_metrics <- function(roc_obj) { 
   youden <- coords(roc_obj, "best") 
   topleft <- coords(roc_obj, "best", best.method = "closest.topleft") 
@@ -783,7 +831,7 @@ metrics_full <- extract_metrics(roc_full)
 
 # Combine all metrics into a single data frame 
 roc_metrics <- data.frame( 
-  Model = c("1b", "1c", "AIC", "BIC", "Full", "Full"), 
+  Model = c("1b", "1c", "AIC", "BIC", "Full"), 
   rbind(metrics_1b, metrics_1c, metrics_aic, metrics_bic, metrics_full) 
   ) 
 
@@ -795,9 +843,9 @@ model_predictions_3c <- pred_phat |> mutate(
   yhat_null = factor(p_null > 0.5, levels = c(FALSE, TRUE), labels = c("low", "high")),
   yhat_1b = factor(p_1b > 0.1655906, levels = c(FALSE, TRUE), labels = c("low", "high")),
   yhat_1c = factor(p_1c > 0.1977642, levels = c(FALSE, TRUE), labels = c("low", "high")),
-  yhat_bic = factor(p_bic > 0.2244232, levels = c(FALSE, TRUE), labels = c("low", "high")),
-  yhat_aic = factor(p_aic > 0.2089494, levels = c(FALSE, TRUE), labels = c("low", "high")),
-  yhat_full = factor(p_full > 0.2773927, levels = c(FALSE, TRUE), labels = c("low", "high"))
+  yhat_bic = factor(p_bic > 0.2253320, levels = c(FALSE, TRUE), labels = c("low", "high")),
+  yhat_aic = factor(p_aic > 0.3066619, levels = c(FALSE, TRUE), labels = c("low", "high")),
+  yhat_full = factor(p_full > 0.2452759, levels = c(FALSE, TRUE), labels = c("low", "high"))
 )
 
 # Get confusion matrix for all the models
@@ -808,14 +856,14 @@ cm_bic_3c <- confusionMatrix(data = model_predictions_3c$yhat_bic, reference = m
 cm_aic_3c <- confusionMatrix(data = model_predictions_3c$yhat_aic, reference = model_predictions_3c$highcars_cat, positive = "high")
 cm_full_3c <- confusionMatrix(data = model_predictions_3c$yhat_full, reference = model_predictions_3c$highcars_cat, positive = "high")
 
-### Confusion matrix #####
+### Confusion matrix ###
 # Create a table to collect the metrics
 # Extract needed statistics from each confusion matrix 
 extract_stats <- function(cm) { 
   list( Accuracy = cm$overall['Accuracy'], 
         P_Value_Acc_Greater_NIR = cm$overall['AccuracyPValue'], 
         Cohen_Kappa = cm$overall['Kappa'], 
-        P_Value_McNemars = cm$byClass['Mcnemar P-Value'], 
+        P_Value_McNemars = cm$overall['McnemarPValue'], 
         Sensitivity = cm$byClass['Sensitivity'], 
         Specificity = cm$byClass['Specificity'] ) } 
 
@@ -833,7 +881,7 @@ table_3c <- data.frame(
   Accuracy = c(stats_null_3c$Accuracy, stats_1b_3c$Accuracy, 
                stats_1c_3c$Accuracy, stats_bic_3c$Accuracy, 
                stats_aic_3c$Accuracy, stats_full_3c$Accuracy),
-  P_Value_Acc = c(stats_null_3c$P_Value_Acc_Greater_NIR, 
+  AccuracyPValue      = c(stats_null_3c$P_Value_Acc_Greater_NIR, 
                   stats_1b_3c$P_Value_Acc_Greater_NIR, 
                   stats_1c_3c$P_Value_Acc_Greater_NIR, 
                   stats_bic_3c$P_Value_Acc_Greater_NIR, 
@@ -845,7 +893,7 @@ table_3c <- data.frame(
                   stats_bic_3c$Cohen_Kappa, 
                   stats_aic_3c$Cohen_Kappa, 
                   stats_full_3c$Cohen_Kappa), 
-  P_Value_McNemars = c(stats_null_3c$P_Value_McNemars, 
+  McnemarPValue  = c(stats_null_3c$P_Value_McNemars, 
                        stats_1b_3c$P_Value_McNemars, 
                        stats_1c_3c$P_Value_McNemars, 
                        stats_bic_3c$P_Value_McNemars, 
@@ -858,4 +906,27 @@ table_3c <- data.frame(
                   stats_1c_3c$Specificity, stats_bic_3c$Specificity, 
                   stats_aic_3c$Specificity, stats_full_3c$Specificity) )
 table_3c
+
+### Best Model: AIC
+
+summary(model_aic)
+ggpairs(kommuner,columns=c(8,11,12,13,14,15))
+
+# Model car
+model_car <- glm(highcars ~ Cars, family = "binomial", data = kommuner)
+pred_phat_car <- cbind(
+  kommuner,
+  p_car = predict(model_car, type = "response")
+)
+glimpse(pred_phat_car)
+
+pred_phat_car |> mutate(
+  yhat_kommuner = factor(p_car > 0.5, levels = c(FALSE, TRUE), labels = c("low", "high"))) -> pred_phat_car
+
+cm_car <- confusionMatrix(
+  data = pred_phat_car$yhat_kommuner, 
+  reference = pred_phat_car$highcars_cat,
+  positive = "high")
+cm_car
+
 
