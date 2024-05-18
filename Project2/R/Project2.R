@@ -18,6 +18,8 @@ library(caret)
 library(pROC)
 # library(MASS)
 library(ResourceSelection)
+library(ggrepel)
+
 
 # load data
 kommuner <- read_excel("data/kommunerProject2.xlsx")
@@ -361,6 +363,7 @@ model_aic <- step(model_null,
 model_aic_sum <- summary(model_aic)
 
 summary(model_aic)
+confint(model_aic)
 
 
 # BIC stepwise selection
@@ -465,6 +468,10 @@ ggplot(model_2b_pred, aes(x = xbeta, y = v)) +
   geom_point() +
   geom_point(data = filter(model_2b_pred, v > 0.06), aes(color = "v > 0.06"), size = 3) +
   geom_point(data = highest_leverages, aes(color = "Highest Leverages"), size = 4) +
+  geom_text_repel(data = filter(model_2b_pred, v > 0.06), aes(label = Kommun), 
+            nudge_x = -3,
+            nudge_y = 0.01,
+            hjust = 0, color = "blue") +
   geom_hline(yintercept = c(2*pplus1_2b/n)) +
   geom_hline(yintercept = 0.06, linetype = "dashed", color = "red") +
   facet_wrap(~ highcars) +
@@ -506,7 +513,7 @@ ggplot(model_2b_pred, aes(x = xbeta, y = Dcook, color = as.factor(highcars))) +
        y = "Cook's Distance",
        caption = "Black points represent outliers with v > 0.06.\n
        Red points indicate top Cook's Distance municipalities") +
-  geom_text(data = top_cooks,
+  geom_text_repel(data = top_cooks,
             aes(label = Kommun),
             nudge_x = -6,
             nudge_y = 0,
@@ -530,6 +537,16 @@ kommuner_pred_DFBETAS <- mutate(
   fit = predict(model_2b),
   r = rstudent(model_2b),
   D = cooks.distance(model_2b))
+
+top_cooks <- kommuner_pred_DFBETAS %>%
+  arrange(desc(D)) %>%
+  slice(1:6)
+
+# DFBETAS of Municipalities with top cook's distance 
+top_cooks_DFBETAS <- kommuner_pred_DFBETAS %>%
+  arrange(desc(D)) %>%
+  slice(1:6) %>%
+  select(Kommun, D, df0, df1, df2, df3, df4)
 
 topcooks_DFBETAS <- top_cooks_DFBETAS[, c("Kommun", "D", "df0", "df1", "df2", "df3", "df4")]
 
