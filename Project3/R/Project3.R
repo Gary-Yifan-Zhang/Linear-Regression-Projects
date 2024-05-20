@@ -98,7 +98,7 @@ Popuation_pred |> mutate(
 
 glimpse(Popuation_pred)
 
-ggplot(Popuation_pred, aes(log(population), log(Cars_nbr))) +
+ggplot(Popuation_pred, aes(log(Population), log(Cars_nbr))) +
   geom_point() +
   geom_line(aes(y = muhat), linewidth = 1) +
   geom_ribbon(aes(ymin = mu.lwr, ymax = mu.upr), alpha = 0.5) +
